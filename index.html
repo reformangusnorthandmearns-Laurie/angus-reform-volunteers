@@ -1,1 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Reform UK — Volunteer Hub</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+  <style>
+    :root {
+      --teal: #00B0CA; --teal-dark: #0096AC; --teal-light: #e6f7f3; --teal-mid: #c2eee3;
+      --text: #1a1a1a; --text-muted: #5f5f5f; --border: #e0e0e0; --bg: #f5f5f5; --white: #ffffff;
+      --red: #e53e3e; --amber: #d97706; --amber-light: #fef3c7; --green: #16a34a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    header { background: var(--teal); color: white; padding: 14px 16px; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+    header .logo { width: 36px; height: 36px; background: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+    header .title { font-size: 15px; font-weight: 600; }
+    header .subtitle { font-size: 11px; opacity: .85; margin-top: 1px; }
+    header .volunteer-name { margin-left: auto; font-size: 12px; background: rgba(255,255,255,0.2); padding: 4px 10px; border-radius: 20px; cursor: pointer; }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    #screen-signin { max-width: 420px; margin: 0 auto; padding: 24px 16px; }
+    .signin-card { background: white; border-radius: 16px; padding: 28px 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+    .signin-card h2 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+    .signin-card p { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.5; }
+    .field { margin-bottom: 16px; }
+    .field label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-muted); }
+    .field input { width: 100%; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 16px; outline: none; transition: border-color .15s; }
+    .field input:focus { border-color: var(--teal); }
+    .btn { width: 100%; padding: 14px; background: var(--teal); color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background .15s; }
+    .btn:hover { background: var(--teal-dark); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-outline { background: white; color: var(--teal); border: 1.5px solid var(--teal); }
+    .btn-outline:hover { background: var(--teal-light); }
+    .btn-sm { width: auto; padding: 8px 16px; font-size: 13px; }
+    .btn-green { background: var(--green); color: white; border: none; }
+    .btn-amber { background: var(--amber); color: white; border: none; }
+    .tabs { display: flex; background: white; border-bottom: 1px solid var(--border); position: sticky; top: 64px; z-index: 99; }
+    .tab-btn { flex: 1; padding: 12px 4px; border: none; background: none; font-size: 12px; font-weight: 500; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .tab-btn .tab-icon { font-size: 18px; }
+    .tab-btn.active { color: var(--teal); border-bottom-color: var(--teal); }
+    .tab-content { display: none; padding: 16px; padding-bottom: 32px; }
+    .tab-content.active { display: block; }
+    .section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin: 0 0 10px; }
+    .town-card { background: white; border-radius: 12px; padding: 16px; margin-bottom: 10px; border: 1.5px solid var(--border); cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 12px; }
+    .town-card:hover { border-color: var(--teal); }
+    .town-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+    .town-name { font-size: 16px; font-weight: 600; }
+    .town-meta { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+    .town-badge { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; flex-shrink: 0; }
+    .badge-red { background: #fee2e2; color: #dc2626; }
+    .badge-green { background: #dcfce7; color: #16a34a; }
+    .badge-amber { background: var(--amber-light); color: var(--amber); }
+    #screen-town { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 200; flex-direction: column; }
+    #screen-town.open { display: flex; }
+    #town-map { flex: 1; width: 100%; }
+    .town-map-header { background: var(--teal); color: white; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    .town-h-name { font-size: 15px; font-weight: 600; }
+    .town-h-sub { font-size: 11px; opacity: .85; margin-top: 1px; }
+    .town-map-footer { background: white; padding: 10px 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
+    .legend-row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    #screen-route-map { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 290; flex-direction: column; }
+    #screen-route-map.open { display: flex; }
+    #route-preview-map { flex: 1; width: 100%; }
+    .route-map-header { background: var(--teal); color: white; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    .route-map-footer { background: white; padding: 12px 16px; border-top: 1px solid var(--border); flex-shrink: 0; display: flex; gap: 10px; }
+    #screen-route-detail { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 300; overflow-y: auto; padding-bottom: 100px; }
+    #screen-route-detail.open { display: block; }
+    .route-detail-header { background: var(--teal); color: white; padding: 12px 16px; }
+    .route-detail-name { font-size: 18px; font-weight: 700; margin-top: 8px; }
+    .route-detail-meta { font-size: 12px; opacity: .85; margin-top: 3px; }
+    .detail-section { background: white; border-radius: 12px; margin: 12px 16px 0; padding: 14px 16px; border: 1px solid var(--border); }
+    .detail-section h3 { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px; }
+    .street-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .street-row:last-child { border-bottom: none; }
+    .street-row-name { font-size: 14px; font-weight: 500; }
+    .street-row-meta { font-size: 12px; color: var(--text-muted); }
+    .note-box { background: var(--amber-light); border: 1px solid #fcd34d; border-radius: 8px; padding: 10px 12px; font-size: 13px; color: #92400e; line-height: 1.5; }
+    .nav-btn { display: flex; align-items: center; gap: 8px; background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; border-radius: 8px; padding: 12px 14px; font-size: 14px; font-weight: 600; text-decoration: none; width: 100%; justify-content: center; }
+    .claim-btn-wrap { position: fixed; bottom: 0; left: 0; right: 0; padding: 14px 16px; background: white; border-top: 1px solid var(--border); display: flex; gap: 10px; z-index: 10; }
+    #screen-streets { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 400; overflow-y: auto; padding-bottom: 90px; }
+    #screen-streets.open { display: block; }
+    .active-route-banner { background: var(--teal); color: white; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .active-route-banner .name { font-size: 14px; font-weight: 600; }
+    .active-route-banner .count { font-size: 12px; opacity: .85; }
+    .street-item { background: white; border-bottom: 1px solid var(--border); padding: 14px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; }
+    .street-item.done { background: #f0fdf4; }
+    .street-check { width: 26px; height: 26px; border: 2px solid var(--border); border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 15px; transition: all .15s; }
+    .street-item.done .street-check { background: var(--green); border-color: var(--green); color: white; }
+    .street-name { font-size: 15px; flex: 1; }
+    .street-item.done .street-name { text-decoration: line-through; color: var(--text-muted); }
+    .street-note { font-size: 11px; color: var(--amber); margin-top: 2px; }
+    .complete-btn-wrap { position: fixed; bottom: 0; left: 0; right: 0; padding: 12px 16px; background: white; border-top: 1px solid var(--border); display: flex; gap: 8px; z-index: 10; }
+    .messages-wrap { display: flex; flex-direction: column; gap: 10px; padding-bottom: 80px; }
+    .message-bubble { background: white; border-radius: 12px; padding: 12px 14px; border: 1px solid var(--border); }
+    .message-bubble.mine { background: var(--teal-light); border-color: var(--teal-mid); }
+    .message-bubble.manager { background: var(--amber-light); border-left: 3px solid var(--amber); }
+    .msg-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .msg-author { font-size: 12px; font-weight: 600; color: var(--teal-dark); }
+    .message-bubble.manager .msg-author { color: var(--amber); }
+    .msg-time { font-size: 11px; color: var(--text-muted); }
+    .msg-text { font-size: 14px; line-height: 1.5; }
+    .msg-input-wrap { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid var(--border); padding: 10px 12px; display: flex; gap: 8px; align-items: flex-end; z-index: 50; }
+    .msg-input { flex: 1; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 20px; font-size: 14px; outline: none; resize: none; max-height: 100px; font-family: inherit; }
+    .msg-input:focus { border-color: var(--teal); }
+    .msg-send { width: 40px; height: 40px; background: var(--teal); color: white; border: none; border-radius: 50%; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .profile-card { background: white; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 16px; }
+    .profile-avatar { width: 64px; height: 64px; background: var(--teal); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; color: white; margin: 0 auto 12px; }
+    .profile-name { font-size: 18px; font-weight: 600; }
+    .profile-phone { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
+    .empty { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 14px; }
+    .empty .emoji { font-size: 36px; margin-bottom: 12px; }
+    .spinner { text-align: center; padding: 30px; color: var(--text-muted); font-size: 24px; }
+    .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #1a1a1a; color: white; padding: 10px 20px; border-radius: 20px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity .3s; white-space: nowrap; }
+    .toast.show { opacity: 1; }
+    .back-btn { background: rgba(255,255,255,0.2); border: none; color: white; border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+    .unread-dot { width: 8px; height: 8px; background: var(--red); border-radius: 50%; display: inline-block; margin-left: 4px; vertical-align: middle; }
+    .map-link { display: flex; align-items: center; gap: 6px; background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; border-radius: 8px; padding: 10px 14px; font-size: 13px; font-weight: 500; text-decoration: none; margin: 12px 16px 0; }
+  </style>
+</head>
+<body>
 
+<!-- SIGN IN -->
+<div id="screen-signin" class="screen active">
+  <div style="background:var(--teal);padding:32px 16px 48px;text-align:center;color:white;">
+    <div style="font-size:40px;margin-bottom:10px;">🗳️</div>
+    <div style="font-size:20px;font-weight:700;">Reform UK Volunteer Hub</div>
+    <div style="font-size:13px;opacity:.85;margin-top:4px;">Angus North &amp; Mearns — 7 May 2026</div>
+  </div>
+  <div style="max-width:420px;margin:-20px auto 0;padding:0 16px 32px;">
+    <div class="signin-card" style="margin-top:0;">
+      <h2>Welcome! 👋</h2>
+      <p>Thanks for coming to help. Just tell us your name and mobile so we can keep in touch — then get started right away.</p>
+      <div class="field"><label>Your name</label><input id="inp-name" type="text" placeholder="e.g. John Smith" autocomplete="name"/></div>
+      <div class="field"><label>Mobile number</label><input id="inp-phone" type="tel" placeholder="e.g. 07700 900123" autocomplete="tel"/></div>
+      <button class="btn" onclick="signIn()">Get Started →</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="screen-main" class="screen">
+  <header>
+    <div class="logo">🗳️</div>
+    <div><div class="title">Volunteer Hub</div><div class="subtitle">Angus North &amp; Mearns · Reform UK</div></div>
+    <div class="volunteer-name" id="header-name" onclick="showTab('profile')">Me ▾</div>
+  </header>
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('routes')" id="tab-routes"><span class="tab-icon">🗺️</span>Routes</button>
+    <button class="tab-btn" onclick="showTab('messages')" id="tab-messages"><span class="tab-icon">💬</span>Messages</button>
+    <button class="tab-btn" onclick="showTab('profile')" id="tab-profile"><span class="tab-icon">👤</span>Me</button>
+  </div>
+
+  <!-- ROUTES TAB -->
+  <div class="tab-content active" id="tc-routes">
+    <div id="my-route-banner" style="display:none;">
+      <div class="active-route-banner" style="margin:-16px -16px 16px;">
+        <div><div class="name" id="active-route-name"></div><div class="count" id="active-route-count"></div></div>
+        <button class="btn btn-sm" style="width:auto;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);" onclick="reopenMyRoute()">Open ▶</button>
+      </div>
+    </div>
+    <p class="section-title">Select a town to see available routes</p>
+    <div id="towns-list"><div class="spinner">⏳</div></div>
+  </div>
+
+  <!-- MESSAGES TAB -->
+  <div class="tab-content" id="tc-messages">
+    <div class="messages-wrap" id="messages-list"><div class="spinner">⏳</div></div>
+  </div>
+  <div class="msg-input-wrap" id="msg-input-wrap" style="display:none;">
+    <textarea class="msg-input" id="msg-input" placeholder="Type a message…" rows="1" oninput="autoResize(this)"></textarea>
+    <button class="msg-send" onclick="sendMessage()">➤</button>
+  </div>
+
+  <!-- PROFILE TAB -->
+  <div class="tab-content" id="tc-profile">
+    <div class="profile-card">
+      <div class="profile-avatar" id="profile-avatar"></div>
+      <div class="profile-name" id="profile-name-display"></div>
+      <div class="profile-phone" id="profile-phone-display"></div>
+    </div>
+    <div style="background:white;border-radius:12px;padding:16px;margin-bottom:12px;">
+      <p class="section-title" style="margin-bottom:10px;">My completed routes</p>
+      <div id="my-completed-routes"><div class="empty"><div class="emoji">🗺️</div>No completed routes yet</div></div>
+    </div>
+    <button class="btn btn-outline" style="margin-top:8px;" onclick="signOut()">Sign out</button>
+  </div>
+</div>
+
+<!-- TOWN MAP SCREEN -->
+<div id="screen-town">
+  <div class="town-map-header">
+    <div><div class="town-h-name" id="town-map-name">Town</div><div class="town-h-sub" id="town-map-sub">Tap a zone to see route details</div></div>
+    <button class="back-btn" onclick="closeTownMap()">✕ Close</button>
+  </div>
+  <div id="town-map"></div>
+  <div class="town-map-footer">
+    <div class="legend-row">
+      <div class="legend-item"><div class="legend-dot" style="background:#16a34a;"></div>Complete</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#00B0CA;"></div>In progress</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#dc2626;"></div>Available</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#d97706;"></div>Partial</div>
+    </div>
+  </div>
+</div>
+
+<!-- ROUTE MAP PREVIEW SCREEN -->
+<div id="screen-route-map">
+  <div class="route-map-header">
+    <div>
+      <div style="font-size:15px;font-weight:600;" id="route-map-name">Route</div>
+      <div style="font-size:11px;opacity:.85;margin-top:1px;" id="route-map-sub">Your streets are highlighted in orange</div>
+    </div>
+    <button class="back-btn" onclick="closeRouteMap()">✕ Close</button>
+  </div>
+  <div id="route-preview-map"></div>
+  <div class="route-map-footer" id="route-map-footer"></div>
+</div>
+
+<!-- ROUTE DETAIL SCREEN -->
+<div id="screen-route-detail">
+  <div class="route-detail-header">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <button class="back-btn" onclick="closeRouteDetail()">← Back to map</button>
+      <span id="route-status-badge" style="font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(255,255,255,0.2);color:white;"></span>
+    </div>
+    <div class="route-detail-name" id="route-detail-name"></div>
+    <div class="route-detail-meta" id="route-detail-meta"></div>
+  </div>
+  <div style="padding:12px 16px 0;">
+    <a id="nav-to-start" class="nav-btn" href="#" target="_blank">📍 Navigate to start point in Google Maps</a>
+  </div>
+  <div class="detail-section" id="streets-preview-section">
+    <h3>Streets in this route</h3>
+    <div id="route-streets-preview"></div>
+  </div>
+  <div class="detail-section" id="notes-section" style="display:none;">
+    <h3>Notes for this route</h3>
+    <div id="route-notes"></div>
+  </div>
+  <div class="claim-btn-wrap" id="claim-btn-wrap"></div>
+</div>
+
+<!-- STREET CHECKLIST SCREEN -->
+<div id="screen-streets">
+  <div class="active-route-banner">
+    <div><div class="name" id="streets-route-name"></div><div class="count" id="streets-progress"></div></div>
+    <button onclick="closeStreets()" style="background:rgba(255,255,255,0.2);border:none;color:white;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px;">✕ Close</button>
+  </div>
+  <div id="map-link-wrap"></div>
+  <div id="streets-list"></div>
+  <div class="complete-btn-wrap">
+    <button class="btn btn-green" id="complete-btn" onclick="markRouteComplete()" style="flex:2;">🎉 Mark Route Complete</button>
+    <button class="btn btn-amber" onclick="cantFinish()" style="flex:1;width:auto;font-size:13px;">Can't finish</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, collection, doc, addDoc, getDoc, getDocs, onSnapshot, updateDoc, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyD5WHXydwx7DAEUplgjELL4DaBqtPswvOs",
+    authDomain: "angus-north-mearns-campaign.firebaseapp.com",
+    projectId: "angus-north-mearns-campaign",
+    storageBucket: "angus-north-mearns-campaign.firebasestorage.app",
+    messagingSenderId: "988179344453",
+    appId: "1:988179344453:web:44bb1f744446894171072c"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  const TOWNS = [
+    { id:'stonehaven',   name:'Stonehaven',   color:'#00B0CA', lat:56.9637, lng:-2.2093 },
+    { id:'laurencekirk', name:'Laurencekirk', color:'#0096AC', lat:56.8313, lng:-2.4725 },
+    { id:'forfar',       name:'Forfar',        color:'#FF6B35', lat:56.6436, lng:-2.8891 },
+    { id:'montrose',     name:'Montrose',      color:'#d97706', lat:56.7069, lng:-2.4661 },
+    { id:'brechin',      name:'Brechin',       color:'#9333ea', lat:56.7322, lng:-2.6603 },
+    { id:'inverbervie',  name:'Inverbervie',   color:'#dc2626', lat:56.8450, lng:-2.2798 },
+    { id:'johnshaven',   name:'Johnshaven',    color:'#0891b2', lat:56.7966, lng:-2.2040 },
+  ];
+
+  let volunteer = null;
+  let myActiveRoute = null;
+  let myActiveRouteData = null;
+  let streetsUnsub = null;
+  let messagesUnsub = null;
+  let lastMessageCount = 0;
+  let townMap = null;
+  let townZonesCache = [];
+  let currentZone = null;
+  let currentTown = null;
+
+  // ── SIGN IN ──
+  window.signIn = async () => {
+    const name = document.getElementById('inp-name').value.trim();
+    const phone = document.getElementById('inp-phone').value.trim();
+    if (!name) { toast('Please enter your name'); return; }
+    if (!phone) { toast('Please enter your mobile number'); return; }
+    const btn = document.querySelector('#screen-signin .btn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const ref = await addDoc(collection(db, 'volunteers'), { name, phone, joinedAt: serverTimestamp() });
+      volunteer = { name, phone, id: ref.id };
+      localStorage.setItem('volunteer', JSON.stringify(volunteer));
+      startApp();
+    } catch(e) {
+      toast('Connection error — check your internet');
+      btn.disabled = false; btn.textContent = 'Get Started →';
+    }
+  };
+
+  function startApp() {
+    document.getElementById('screen-signin').classList.remove('active');
+    document.getElementById('screen-main').classList.add('active');
+    document.getElementById('header-name').textContent = volunteer.name.split(' ')[0] + ' ▾';
+    document.getElementById('profile-avatar').textContent = volunteer.name[0].toUpperCase();
+    document.getElementById('profile-name-display').textContent = volunteer.name;
+    document.getElementById('profile-phone-display').textContent = volunteer.phone;
+    loadTownSummaries();
+    loadMessages();
+  }
+
+  window.signOut = () => {
+    localStorage.removeItem('volunteer');
+    volunteer = null;
+    if (messagesUnsub) messagesUnsub();
+    document.getElementById('screen-main').classList.remove('active');
+    document.getElementById('screen-signin').classList.add('active');
+    document.getElementById('inp-name').value = '';
+    document.getElementById('inp-phone').value = '';
+  };
+
+  // ── TOWN SUMMARIES ──
+  function loadTownSummaries() {
+    const zonesRef = collection(db, 'campaign', 'zones', 'items');
+    onSnapshot(zonesRef, snap => {
+      const allZones = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderTownList(allZones);
+
+      // Check my active route
+      const mine = allZones.find(z => z.claimedBy === volunteer.id && z.status === 'active');
+      if (mine) {
+        myActiveRoute = mine.id;
+        myActiveRouteData = mine;
+        document.getElementById('my-route-banner').style.display = 'block';
+        document.getElementById('active-route-name').textContent = '📍 ' + mine.name;
+        const streets = mine.streets || [];
+        const done = streets.filter(s => s.done).length;
+        document.getElementById('active-route-count').textContent = `${done} / ${streets.length} streets done`;
+      } else {
+        myActiveRoute = null;
+        myActiveRouteData = null;
+        document.getElementById('my-route-banner').style.display = 'none';
+      }
+
+      // Completed routes in profile
+      const myDone = allZones.filter(z => z.completedBy === volunteer.id);
+      const doneEl = document.getElementById('my-completed-routes');
+      doneEl.innerHTML = myDone.length === 0
+        ? '<div class="empty"><div class="emoji">🗺️</div>No completed routes yet</div>'
+        : myDone.map(z => `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">✅ ${z.name} — ${z.town || ''}</div>`).join('');
+    });
+  }
+
+  function renderTownList(allZones) {
+    const list = document.getElementById('towns-list');
+    const html = TOWNS.map(t => {
+      const tZones = allZones.filter(z => z.townId === t.id);
+      if (tZones.length === 0) return '';
+      const available = tZones.filter(z => !z.claimedBy && z.status !== 'Complete').length;
+      const done = tZones.filter(z => z.status === 'Complete').length;
+      const inProgress = tZones.filter(z => z.claimedBy && z.status !== 'Complete').length;
+      let badge = '';
+      if (available > 0) badge = `<span class="town-badge badge-red">${available} available</span>`;
+      else if (done === tZones.length) badge = `<span class="town-badge badge-green">✅ Complete</span>`;
+      else badge = `<span class="town-badge badge-amber">${inProgress} in progress</span>`;
+      return `<div class="town-card" onclick="openTownMap('${t.id}')">
+        <div class="town-dot" style="background:${t.color};"></div>
+        <div style="flex:1;"><div class="town-name">${t.name}</div><div class="town-meta">${tZones.length} routes · ${done} complete</div></div>
+        ${badge}
+      </div>`;
+    }).join('');
+    list.innerHTML = html || '<div class="empty"><div class="emoji">🗺️</div>No routes set up yet — check back soon!</div>';
+  }
+
+  // ── TOWN MAP ──
+  window.openTownMap = async (townId) => {
+    currentTown = TOWNS.find(t => t.id === townId);
+    if (!currentTown) return;
+    document.getElementById('town-map-name').textContent = currentTown.name;
+    document.getElementById('town-map-sub').textContent = 'Loading routes…';
+    document.getElementById('screen-town').classList.add('open');
+
+    setTimeout(async () => {
+      if (townMap) { townMap.remove(); townMap = null; }
+      townMap = L.map('town-map', { zoomControl: true }).setView([currentTown.lat, currentTown.lng], 14);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors', maxZoom: 19
+      }).addTo(townMap);
+
+      const snap = await getDocs(collection(db, 'campaign', 'zones', 'items'));
+      townZonesCache = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(z => z.townId === townId);
+
+      if (townZonesCache.length === 0) {
+        document.getElementById('town-map-sub').textContent = 'No routes set up yet for this town';
+        return;
+      }
+
+      const bounds = [];
+      townZonesCache.forEach(zone => {
+        if (!zone.lat || !zone.lng) return;
+        const color = zoneColor(zone);
+        const circle = L.circleMarker([zone.lat, zone.lng], {
+          radius: 24, fillColor: color, color: '#fff', weight: 3, fillOpacity: 0.9
+        }).addTo(townMap);
+
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="background:${color};color:white;font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.3);pointer-events:none;">${zone.name}</div>`,
+          iconAnchor: [-4, 28],
+        });
+        L.marker([zone.lat, zone.lng], { icon, interactive: false }).addTo(townMap);
+        circle.on('click', () => openRouteDetail(zone));
+        bounds.push([zone.lat, zone.lng]);
+      });
+
+      if (bounds.length > 0) townMap.fitBounds(bounds, { padding: [50, 50] });
+      document.getElementById('town-map-sub').textContent = `${townZonesCache.length} routes — tap a circle to open`;
+    }, 300);
+  };
+
+  function zoneColor(zone) {
+    if (zone.status === 'Complete') return '#16a34a';
+    if (zone.status === 'active' || zone.status === 'Assigned') return '#00B0CA';
+    if (zone.status === 'partial') return '#d97706';
+    return '#dc2626';
+  }
+
+  window.closeTownMap = () => {
+    document.getElementById('screen-town').classList.remove('open');
+    if (townMap) { townMap.remove(); townMap = null; }
+  };
+
+  // ── ROUTE DETAIL ──
+  function openRouteDetail(zone) {
+    currentZone = zone;
+    const isMe = zone.claimedBy === volunteer.id;
+    const isTaken = zone.claimedBy && zone.claimedBy !== volunteer.id && zone.status !== 'Complete';
+    const isDone = zone.status === 'Complete';
+
+    document.getElementById('route-detail-name').textContent = zone.name;
+    document.getElementById('route-detail-meta').textContent = `${zone.town || ''} · ${zone.count || 0} delivery points`;
+
+    const badge = document.getElementById('route-status-badge');
+    if (isDone) { badge.textContent = '✅ Complete'; }
+    else if (isMe) { badge.textContent = '📍 Your route'; }
+    else if (isTaken) { badge.textContent = `🔒 ${zone.claimedByName || 'Someone'} is doing this`; }
+    else { badge.textContent = '🟢 Available'; }
+
+    // Google Maps nav to start
+    const navBtn = document.getElementById('nav-to-start');
+    navBtn.href = zone.lat && zone.lng
+      ? `https://www.google.com/maps/dir/?api=1&destination=${zone.lat},${zone.lng}&travelmode=walking`
+      : '#';
+
+    // Streets preview
+    const streets = zone.streets || [];
+    const streetsEl = document.getElementById('route-streets-preview');
+    if (streets.length === 0) {
+      streetsEl.innerHTML = '<div style="font-size:13px;color:var(--text-muted);padding:6px 0;">Street details will be added by coordinator</div>';
+    } else {
+      streetsEl.innerHTML = streets.map((s, i) => `
+        <div class="street-row">
+          <div><div class="street-row-name">${i+1}. ${s.name}</div>${s.note ? `<div style="font-size:11px;color:var(--amber);">⚠️ ${s.note}</div>` : ''}</div>
+          <div class="street-row-meta">${s.houses ? s.houses + ' houses' : ''}</div>
+        </div>`).join('');
+    }
+
+    // Notes
+    if (zone.notes) {
+      document.getElementById('notes-section').style.display = 'block';
+      document.getElementById('route-notes').innerHTML = `<div class="note-box">⚠️ ${zone.notes}</div>`;
+    } else if (zone.partialNote) {
+      document.getElementById('notes-section').style.display = 'block';
+      document.getElementById('route-notes').innerHTML = `<div class="note-box">⚠️ Partially done by ${zone.partialBy || 'previous volunteer'}: ${zone.partialNote}</div>`;
+    } else {
+      document.getElementById('notes-section').style.display = 'none';
+    }
+
+    // Action buttons
+    const wrap = document.getElementById('claim-btn-wrap');
+    if (isDone) {
+      wrap.innerHTML = '<div style="text-align:center;color:var(--green);font-weight:600;padding:10px;width:100%;">✅ This route is complete</div>';
+    } else if (isMe) {
+      wrap.innerHTML = `<button class="btn btn-green" onclick="openStreetsById('${zone.id}')" style="flex:2;">Open My Route ▶</button><button class="btn btn-outline" onclick="closeRouteDetail()" style="flex:1;">Close</button>`;
+    } else if (isTaken) {
+      wrap.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:10px;width:100%;">🔒 ${zone.claimedByName || 'Someone'} is already doing this route</div>`;
+    } else {
+      wrap.innerHTML = `<button class="btn btn-green" onclick="claimRoute()" style="flex:2;">📍 I'll do this route</button><button class="btn btn-outline" onclick="closeRouteDetail()" style="flex:1;">Cancel</button>`;
+    }
+
+    // Show route map first, then detail
+    openRouteMap(zone);
+  }
+
+  // ── ROUTE MAP PREVIEW ──
+  let routePreviewMap = null;
+
+  async function openRouteMap(zone) {
+    currentZone = zone;
+    const isMe = zone.claimedBy === volunteer.id;
+    const isTaken = zone.claimedBy && zone.claimedBy !== volunteer.id && zone.status !== 'Complete';
+    const isDone = zone.status === 'Complete';
+
+    document.getElementById('route-map-name').textContent = zone.name;
+    document.getElementById('route-map-sub').textContent = 'Loading your streets…';
+    document.getElementById('screen-route-map').classList.add('open');
+
+    // Build footer buttons
+    const footer = document.getElementById('route-map-footer');
+    if (isDone) {
+      footer.innerHTML = '<div style="text-align:center;color:var(--green);font-weight:600;width:100%;">✅ This route is complete</div>';
+    } else if (isMe) {
+      footer.innerHTML = `<button class="btn btn-green" onclick="closeRouteMap();openStreetsById('${zone.id}')" style="flex:2;">Open My Route ▶</button><button class="btn btn-outline" onclick="closeRouteMap()" style="flex:1;">Back</button>`;
+    } else if (isTaken) {
+      footer.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:13px;width:100%;">🔒 ${zone.claimedByName || 'Someone'} is already doing this</div>`;
+    } else {
+      footer.innerHTML = `<button class="btn btn-green" onclick="claimFromMap()" style="flex:2;">📍 I'll do this route</button><button class="btn btn-outline" onclick="closeRouteMap()" style="flex:1;">Back</button>`;
+    }
+
+    // Init map
+    setTimeout(async () => {
+      if (routePreviewMap) { routePreviewMap.remove(); routePreviewMap = null; }
+      const mapEl = document.getElementById('route-preview-map');
+      routePreviewMap = L.map(mapEl, { zoomControl: true }).setView([zone.lat || currentTown.lat, zone.lng || currentTown.lng], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors', maxZoom: 19
+      }).addTo(routePreviewMap);
+
+      const streetNames = (zone.streets || []).map(s => s.name);
+      document.getElementById('route-map-sub').textContent = streetNames.length > 0
+        ? `${streetNames.length} streets in this route — highlighted in orange`
+        : 'Tap "I'll do this route" to claim it';
+
+      if (streetNames.length > 0) {
+        // Load streets from Overpass and highlight the ones in this zone
+        try {
+          const pad = 0.05;
+          const south = (currentTown.lat - pad).toFixed(6);
+          const west  = (currentTown.lng - pad).toFixed(6);
+          const north = (currentTown.lat + pad).toFixed(6);
+          const east  = (currentTown.lng + pad).toFixed(6);
+          const query = `[out:json][timeout:25];way["highway"]["name"](${south},${west},${north},${east});out geom;`;
+          const endpoints = [
+            'https://overpass-api.de/api/interpreter',
+            'https://overpass.kumi.systems/api/interpreter'
+          ];
+          let data = null;
+          for (const ep of endpoints) {
+            try {
+              const r = await fetch(`${ep}?data=${encodeURIComponent(query)}`);
+              if (r.ok) { data = await r.json(); break; }
+            } catch(e) { continue; }
+          }
+          if (data) {
+            const bounds = [];
+            const nameSet = new Set(streetNames);
+            (data.elements || []).forEach(el => {
+              if (!el.tags?.name || !el.geometry || el.geometry.length < 2) return;
+              const isRoute = nameSet.has(el.tags.name);
+              const coords = el.geometry.map(n => [n.lat, n.lon]);
+              L.polyline(coords, {
+                color: isRoute ? '#FF6B35' : '#cccccc',
+                weight: isRoute ? 5 : 2,
+                opacity: isRoute ? 0.95 : 0.4
+              }).addTo(routePreviewMap);
+              if (isRoute) coords.forEach(pt => bounds.push(pt));
+            });
+            if (bounds.length > 0) routePreviewMap.fitBounds(bounds, { padding: [40, 40] });
+          }
+        } catch(e) { console.error('Route map error:', e); }
+      } else {
+        // No streets yet — just show a marker at zone centre
+        if (zone.lat && zone.lng) {
+          L.circleMarker([zone.lat, zone.lng], { radius: 20, fillColor: '#FF6B35', color: '#fff', weight: 3, fillOpacity: 0.8 }).addTo(routePreviewMap);
+        }
+      }
+    }, 250);
+  }
+
+  window.closeRouteMap = () => {
+    document.getElementById('screen-route-map').classList.remove('open');
+    if (routePreviewMap) { routePreviewMap.remove(); routePreviewMap = null; }
+  };
+
+  window.claimFromMap = async () => {
+    closeRouteMap();
+    await claimRoute();
+  };
+
+  window.closeRouteDetail = () => {
+    document.getElementById('screen-route-detail').classList.remove('open');
+  };
+
+  // ── CLAIM ──
+  window.claimRoute = async () => {
+    if (!currentZone || !volunteer) return;
+    const zoneRef = doc(db, 'campaign', 'zones', 'items', currentZone.id);
+    await updateDoc(zoneRef, {
+      claimedBy: volunteer.id,
+      claimedByName: volunteer.name,
+      claimedAt: serverTimestamp(),
+      status: 'active'
+    });
+    await addDoc(collection(db, 'messages'), {
+      text: `📍 ${volunteer.name} has claimed "${currentZone.name}" in ${currentZone.town || ''} and is heading out now!`,
+      authorName: volunteer.name, authorId: volunteer.id, isVolunteer: true, timestamp: serverTimestamp()
+    });
+    myActiveRoute = currentZone.id;
+    myActiveRouteData = { ...currentZone, claimedBy: volunteer.id, status: 'active' };
+    toast('Route claimed! Good luck 🎉');
+    closeRouteDetail();
+    openStreetsById(currentZone.id);
+  };
+
+  // ── STREETS ──
+  window.openStreetsById = async (zoneId) => {
+    const snap = await getDoc(doc(db, 'campaign', 'zones', 'items', zoneId));
+    const zone = { id: zoneId, ...snap.data() };
+    currentZone = zone;
+    openStreetsView(zone);
+  };
+
+  window.reopenMyRoute = async () => {
+    if (myActiveRoute) openStreetsById(myActiveRoute);
+  };
+
+  function openStreetsView(zone) {
+    document.getElementById('streets-route-name').textContent = zone.name;
+    document.getElementById('screen-streets').classList.add('open');
+
+    const mapWrap = document.getElementById('map-link-wrap');
+    mapWrap.innerHTML = zone.lat && zone.lng
+      ? `<a class="map-link" href="https://www.google.com/maps/dir/?api=1&destination=${zone.lat},${zone.lng}&travelmode=walking" target="_blank">📍 Navigate to start point in Google Maps</a>`
+      : '';
+
+    renderStreetChecklist(zone.id, zone.streets || []);
+
+    if (streetsUnsub) streetsUnsub();
+    streetsUnsub = onSnapshot(doc(db, 'campaign', 'zones', 'items', zone.id), snap => {
+      if (!snap.data()) return;
+      const d = snap.data();
+      renderStreetChecklist(zone.id, d.streets || []);
+      const streets = d.streets || [];
+      const done = streets.filter(s => s.done).length;
+      document.getElementById('streets-progress').textContent = `${done} / ${streets.length} streets done`;
+      if (myActiveRoute === zone.id) {
+        document.getElementById('active-route-count').textContent = `${done} / ${streets.length} streets done`;
+      }
+      if (streets.length > 0 && done === streets.length) {
+        document.getElementById('complete-btn').textContent = '🎉 All streets done — Mark Complete!';
+      }
+    });
+  }
+
+  function renderStreetChecklist(zoneId, streets) {
+    const list = document.getElementById('streets-list');
+    if (streets.length === 0) {
+      list.innerHTML = '<div class="empty"><div class="emoji">🏘️</div>No streets set up for this route yet.<br>Coordinator will add them shortly.</div>';
+      return;
+    }
+    list.innerHTML = streets.map((s, i) => `
+      <div class="street-item ${s.done ? 'done' : ''}" onclick="toggleStreet('${zoneId}', ${i})">
+        <div class="street-check">${s.done ? '✓' : ''}</div>
+        <div style="flex:1;">
+          <div class="street-name">${s.name}</div>
+          ${s.note ? `<div class="street-note">⚠️ ${s.note}</div>` : ''}
+          ${s.houses ? `<div style="font-size:11px;color:var(--text-muted);">${s.houses} houses</div>` : ''}
+        </div>
+      </div>`).join('');
+  }
+
+  window.toggleStreet = async (zoneId, idx) => {
+    const ref = doc(db, 'campaign', 'zones', 'items', zoneId);
+    const snap = await getDoc(ref);
+    const streets = snap.data().streets || [];
+    streets[idx].done = !streets[idx].done;
+    await updateDoc(ref, { streets, lastUpdated: serverTimestamp() });
+  };
+
+  window.closeStreets = () => {
+    document.getElementById('screen-streets').classList.remove('open');
+    if (streetsUnsub) { streetsUnsub(); streetsUnsub = null; }
+  };
+
+  window.markRouteComplete = async () => {
+    if (!currentZone) return;
+    const ref = doc(db, 'campaign', 'zones', 'items', currentZone.id);
+    const snap = await getDoc(ref);
+    const data = snap.data();
+    const streets = data.streets || [];
+    const undone = streets.filter(s => !s.done).length;
+    if (undone > 0) {
+      const go = confirm(`You still have ${undone} street(s) not ticked. Mark complete anyway?`);
+      if (!go) return;
+    }
+    await updateDoc(ref, {
+      streets: streets.map(s => ({ ...s, done: true })),
+      status: 'Complete',
+      completedBy: volunteer.id,
+      completedByName: volunteer.name,
+      completedAt: serverTimestamp(),
+      claimedBy: null
+    });
+    await addDoc(collection(db, 'messages'), {
+      text: `🎉 ${volunteer.name} has completed "${currentZone.name}" in ${currentZone.town || ''}! All leaflets delivered!`,
+      authorName: volunteer.name, authorId: volunteer.id, isVolunteer: true, timestamp: serverTimestamp()
+    });
+    myActiveRoute = null;
+    myActiveRouteData = null;
+    document.getElementById('my-route-banner').style.display = 'none';
+    closeStreets();
+    toast('🎉 Route complete! Amazing work!');
+  };
+
+  window.cantFinish = async () => {
+    if (!currentZone) return;
+    const note = prompt("How far did you get? (e.g. 'Done High Street, couldn't finish Back Wynd')");
+    if (note === null) return;
+    const ref = doc(db, 'campaign', 'zones', 'items', currentZone.id);
+    await updateDoc(ref, {
+      status: 'partial',
+      partialNote: note,
+      partialBy: volunteer.name,
+      partialAt: serverTimestamp(),
+      claimedBy: null
+    });
+    await addDoc(collection(db, 'messages'), {
+      text: `⚠️ ${volunteer.name} couldn't finish "${currentZone.name}" — ${note}. Route needs reassigning.`,
+      authorName: volunteer.name, authorId: volunteer.id, isVolunteer: true, timestamp: serverTimestamp()
+    });
+    myActiveRoute = null;
+    myActiveRouteData = null;
+    document.getElementById('my-route-banner').style.display = 'none';
+    closeStreets();
+    toast('Thanks — coordinator has been notified');
+  };
+
+  // ── MESSAGES ──
+  function loadMessages() {
+    const q = query(collection(db, 'messages'), orderBy('timestamp', 'asc'));
+    messagesUnsub = onSnapshot(q, snap => {
+      const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderMessages(msgs);
+      if (msgs.length > lastMessageCount && lastMessageCount > 0) {
+        const tab = document.getElementById('tab-messages');
+        if (!document.getElementById('tc-messages').classList.contains('active') && !tab.querySelector('.unread-dot')) {
+          tab.innerHTML += '<span class="unread-dot"></span>';
+        }
+      }
+      lastMessageCount = msgs.length;
+    });
+  }
+
+  function renderMessages(msgs) {
+    const list = document.getElementById('messages-list');
+    if (msgs.length === 0) {
+      list.innerHTML = '<div class="empty"><div class="emoji">💬</div>No messages yet. Say hello!</div>';
+      document.getElementById('msg-input-wrap').style.display = 'flex';
+      return;
+    }
+    list.innerHTML = msgs.map(m => {
+      const isMe = m.authorId === volunteer?.id;
+      const ts = m.timestamp?.toDate ? m.timestamp.toDate() : new Date();
+      const timeStr = ts.toLocaleString('en-GB', { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+      let cls = 'message-bubble' + (isMe ? ' mine' : '') + (m.isManager ? ' manager' : '');
+      return `<div class="${cls}"><div class="msg-header"><span class="msg-author">${m.isManager ? '⭐ ' : ''}${m.authorName || 'Unknown'}${isMe ? ' (you)' : ''}</span><span class="msg-time">${timeStr}</span></div><div class="msg-text">${m.text}</div></div>`;
+    }).join('');
+    document.getElementById('msg-input-wrap').style.display = 'flex';
+    setTimeout(() => { list.scrollTop = list.scrollHeight; }, 100);
+  }
+
+  window.sendMessage = async () => {
+    const input = document.getElementById('msg-input');
+    const text = input.value.trim();
+    if (!text || !volunteer) return;
+    input.value = '';
+    autoResize(input);
+    await addDoc(collection(db, 'messages'), { text, authorName: volunteer.name, authorId: volunteer.id, isVolunteer: true, isManager: false, timestamp: serverTimestamp() });
+  };
+
+  window.autoResize = el => { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 100) + 'px'; };
+
+  window.showTab = tab => {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+    document.getElementById('tc-' + tab).classList.add('active');
+    document.getElementById('tab-' + tab).classList.add('active');
+    document.getElementById('msg-input-wrap').style.display = tab === 'messages' ? 'flex' : 'none';
+    if (tab === 'messages') { const dot = document.getElementById('tab-messages').querySelector('.unread-dot'); if (dot) dot.remove(); }
+  };
+
+  window.toast = msg => {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2800);
+  };
+
+  // Auto login
+  const saved = localStorage.getItem('volunteer');
+  if (saved) { try { volunteer = JSON.parse(saved); startApp(); } catch(e) { localStorage.removeItem('volunteer'); } }
+</script>
+</body>
+</html>
