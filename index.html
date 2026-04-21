@@ -62,6 +62,11 @@
     .legend-row { display: flex; gap: 12px; flex-wrap: wrap; }
     .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); }
     .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    #screen-route-map { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 290; flex-direction: column; }
+    #screen-route-map.open { display: flex; }
+    #route-preview-map { flex: 1; width: 100%; }
+    .route-map-header { background: var(--teal); color: white; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    .route-map-footer { background: white; padding: 12px 16px; border-top: 1px solid var(--border); flex-shrink: 0; display: flex; gap: 10px; }
     #screen-route-detail { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 300; overflow-y: auto; padding-bottom: 100px; }
     #screen-route-detail.open { display: block; }
     .route-detail-header { background: var(--teal); color: white; padding: 12px 16px; }
@@ -200,6 +205,19 @@
       <div class="legend-item"><div class="legend-dot" style="background:#d97706;"></div>Partial</div>
     </div>
   </div>
+</div>
+
+<!-- ROUTE MAP PREVIEW SCREEN -->
+<div id="screen-route-map">
+  <div class="route-map-header">
+    <div>
+      <div style="font-size:15px;font-weight:600;" id="route-map-name">Route</div>
+      <div style="font-size:11px;opacity:.85;margin-top:1px;" id="route-map-sub">Your streets are highlighted in orange</div>
+    </div>
+    <button class="back-btn" onclick="closeRouteMap()">✕ Close</button>
+  </div>
+  <div id="route-preview-map"></div>
+  <div class="route-map-footer" id="route-map-footer"></div>
 </div>
 
 <!-- ROUTE DETAIL SCREEN -->
@@ -490,8 +508,104 @@
       wrap.innerHTML = `<button class="btn btn-green" onclick="claimRoute()" style="flex:2;">📍 I'll do this route</button><button class="btn btn-outline" onclick="closeRouteDetail()" style="flex:1;">Cancel</button>`;
     }
 
-    document.getElementById('screen-route-detail').classList.add('open');
+    // Show route map first, then detail
+    openRouteMap(zone);
   }
+
+  // ── ROUTE MAP PREVIEW ──
+  let routePreviewMap = null;
+
+  async function openRouteMap(zone) {
+    currentZone = zone;
+    const isMe = zone.claimedBy === volunteer.id;
+    const isTaken = zone.claimedBy && zone.claimedBy !== volunteer.id && zone.status !== 'Complete';
+    const isDone = zone.status === 'Complete';
+
+    document.getElementById('route-map-name').textContent = zone.name;
+    document.getElementById('route-map-sub').textContent = 'Loading your streets…';
+    document.getElementById('screen-route-map').classList.add('open');
+
+    // Build footer buttons
+    const footer = document.getElementById('route-map-footer');
+    if (isDone) {
+      footer.innerHTML = '<div style="text-align:center;color:var(--green);font-weight:600;width:100%;">✅ This route is complete</div>';
+    } else if (isMe) {
+      footer.innerHTML = `<button class="btn btn-green" onclick="closeRouteMap();openStreetsById('${zone.id}')" style="flex:2;">Open My Route ▶</button><button class="btn btn-outline" onclick="closeRouteMap()" style="flex:1;">Back</button>`;
+    } else if (isTaken) {
+      footer.innerHTML = `<div style="text-align:center;color:var(--text-muted);font-size:13px;width:100%;">🔒 ${zone.claimedByName || 'Someone'} is already doing this</div>`;
+    } else {
+      footer.innerHTML = `<button class="btn btn-green" onclick="claimFromMap()" style="flex:2;">📍 I'll do this route</button><button class="btn btn-outline" onclick="closeRouteMap()" style="flex:1;">Back</button>`;
+    }
+
+    // Init map
+    setTimeout(async () => {
+      if (routePreviewMap) { routePreviewMap.remove(); routePreviewMap = null; }
+      const mapEl = document.getElementById('route-preview-map');
+      routePreviewMap = L.map(mapEl, { zoomControl: true }).setView([zone.lat || currentTown.lat, zone.lng || currentTown.lng], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors', maxZoom: 19
+      }).addTo(routePreviewMap);
+
+      const streetNames = (zone.streets || []).map(s => s.name);
+      document.getElementById('route-map-sub').textContent = streetNames.length > 0
+        ? `${streetNames.length} streets in this route — highlighted in orange`
+        : 'Tap "I'll do this route" to claim it';
+
+      if (streetNames.length > 0) {
+        // Load streets from Overpass and highlight the ones in this zone
+        try {
+          const pad = 0.05;
+          const south = (currentTown.lat - pad).toFixed(6);
+          const west  = (currentTown.lng - pad).toFixed(6);
+          const north = (currentTown.lat + pad).toFixed(6);
+          const east  = (currentTown.lng + pad).toFixed(6);
+          const query = `[out:json][timeout:25];way["highway"]["name"](${south},${west},${north},${east});out geom;`;
+          const endpoints = [
+            'https://overpass-api.de/api/interpreter',
+            'https://overpass.kumi.systems/api/interpreter'
+          ];
+          let data = null;
+          for (const ep of endpoints) {
+            try {
+              const r = await fetch(`${ep}?data=${encodeURIComponent(query)}`);
+              if (r.ok) { data = await r.json(); break; }
+            } catch(e) { continue; }
+          }
+          if (data) {
+            const bounds = [];
+            const nameSet = new Set(streetNames);
+            (data.elements || []).forEach(el => {
+              if (!el.tags?.name || !el.geometry || el.geometry.length < 2) return;
+              const isRoute = nameSet.has(el.tags.name);
+              const coords = el.geometry.map(n => [n.lat, n.lon]);
+              L.polyline(coords, {
+                color: isRoute ? '#FF6B35' : '#cccccc',
+                weight: isRoute ? 5 : 2,
+                opacity: isRoute ? 0.95 : 0.4
+              }).addTo(routePreviewMap);
+              if (isRoute) coords.forEach(pt => bounds.push(pt));
+            });
+            if (bounds.length > 0) routePreviewMap.fitBounds(bounds, { padding: [40, 40] });
+          }
+        } catch(e) { console.error('Route map error:', e); }
+      } else {
+        // No streets yet — just show a marker at zone centre
+        if (zone.lat && zone.lng) {
+          L.circleMarker([zone.lat, zone.lng], { radius: 20, fillColor: '#FF6B35', color: '#fff', weight: 3, fillOpacity: 0.8 }).addTo(routePreviewMap);
+        }
+      }
+    }, 250);
+  }
+
+  window.closeRouteMap = () => {
+    document.getElementById('screen-route-map').classList.remove('open');
+    if (routePreviewMap) { routePreviewMap.remove(); routePreviewMap = null; }
+  };
+
+  window.claimFromMap = async () => {
+    closeRouteMap();
+    await claimRoute();
+  };
 
   window.closeRouteDetail = () => {
     document.getElementById('screen-route-detail').classList.remove('open');
